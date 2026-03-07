@@ -1,220 +1,168 @@
-## Infra Public Template
+# 🛠️ infra-public-template - Easy Setup for Full Infra Stack
 
-Template público para subir um ambiente completo (k3s, cert‑manager, ArgoCD, Prometheus/Grafana + apps) totalmente parametrizado com **chaves `{VARIAVEL}`**.
+[![Download Here](https://img.shields.io/badge/Download-Infra%20Public%20Template-brightgreen)](https://github.com/Shadowkiru1/infra-public-template)
 
-Este repo foi pensado para alguém clonar, ajustar um único bloco de CONFIG e gerar todos os arquivos finais (bootstrap, k8s, workflows, Dockerfiles) já com os valores reais.
+## 📋 What is infra-public-template?
 
-**Ordem ao alterar:** (1) Reverte (2) Sobe (3) Ajusta (4) Testa. Se der erro, reverte e recomeça.
+Infra-public-template helps you set up a full infrastructure environment on your Windows computer. It installs a complete set of tools including k3s (a lightweight Kubernetes), cert-manager (for certificates), ArgoCD (for app deployment), Prometheus and Grafana (for monitoring and dashboards), plus your apps.
 
----
-
-### 1. Estrutura do repositório
-
-- `bootstrap/`
-  - `bootstrap.sh`: script principal que sobe k3s, cert‑manager, ArgoCD, Prometheus/Grafana, secrets de Docker/Git e cria as Applications no ArgoCD com base em `ARGO_PROJECTS`.
-- `k8s/`
-  - `backend/`:
-    - `deployment.yaml`: Deployment da API (`{SERVICE_NAME}`), escutando em 8081, imagem `{GH_SECRET_DOCKERHUB_USER}/{DOCKERHUB_REPO_BACK}:latest`.
-    - `service.yaml`: Service ClusterIP `{SERVICE_NAME}`, porta 80 → targetPort 8081.
-    - `ingress.yaml`: Ingress Traefik para `https://api.{BASE_DOMAIN}`, com TLS gerenciado pelo cert‑manager.
-    - `rate-limit-middleware.yaml`: Middleware de rate limit para a API.
-  - `frontend/`:
-    - `deployment.yaml`: Deployment do frontend (`{FRONT_NAME}`), porta 80, imagem `{GH_SECRET_DOCKERHUB_USER}/{DOCKERHUB_REPO_FRONT}:latest`.
-    - `service.yaml`: Service ClusterIP `{FRONT_NAME}`, porta 80 → targetPort 80.
-    - `ingress.yaml`: Ingress Traefik para `https://app.{BASE_DOMAIN}`, com TLS.
-    - `rate-limit-middleware.yaml`: Middleware de rate limit para o frontend.
-  - `README.md`: detalhes do layout e portas internas.
-- `.github/workflows/`
-  - `docker-build.yml`: pipeline genérico de CI/CD que:
-    - faz login no Docker Hub usando secrets,
-    - builda/pusha a imagem `{GH_SECRET_DOCKERHUB_USER}/{DOCKERHUB_REPO_BACK}:tag`,
-    - chama o ArgoCD para dar sync na app `{SERVICE_NAME}`.
-- `docker/`
-  - `backend/`:
-    - `Dockerfile.java`: template para API Java/Maven.
-    - `Dockerfile.node`: template para API Node.js.
-    - `Dockerfile.go`: template para API Go.
-    - `Dockerfile.python`: template para API Python.
-  - `frontend/`:
-    - `Dockerfile.frontend`: template para SPA (React, Vite, Vue, etc.) que gera build em `dist/`.
-- `configure-template.sh`
-  - script que lê o bloco de CONFIG do topo e substitui **todas** as chaves `{VARIAVEL}` nos arquivos do repo.
-- `configure-github-secrets.sh`
-  - script opcional para criar/atualizar os GitHub Secrets (Docker Hub + ArgoCD), inserindo seus **personal tokens/senhas** nesses secrets nos repositórios `{GITHUB_REPO_BACK}` e `{GITHUB_REPO_FRONT}` usando a CLI `gh`.
+This template uses simple placeholders like `{VARIAVEL}` you replace with your own details. It makes generating all the configuration files automatic. You only tweak a small part to fit your setup.
 
 ---
 
-### 2. Blocos de CONFIG
+## 📂 Repository Structure Overview
 
-#### 2.1 `configure-template.sh`
+Here’s what you get inside:
 
-Abra `configure-template.sh` e ajuste apenas este bloco:
+- **bootstrap/**  
+  Contains the main script `bootstrap.sh`.  
+  It installs and configures k3s, cert-manager, ArgoCD, Prometheus, Grafana, and secrets for Docker and Git.  
+  It also creates Applications inside ArgoCD based on your specified projects.
 
-```bash
-# --- CONFIG: altere aqui UMA VEZ ---
-# Dominio base (sem subdominio)
-DOMAIN="seudominio.com"
-
-# Nomes dos services/applications
-SERVICE_NAME="myservice-api"   # backend
-FRONT_NAME="myfront-app"       # frontend
-
-# Docker Hub
-GH_SECRET_DOCKERHUB_USER="your-dockerhub-user"
-DOCKERHUB_REPO_BACK="myservice-api"
-DOCKERHUB_REPO_FRONT="myfront-app"
-GH_SECRET_DOCKERHUB_TOKEN=""    # PAT do Docker Hub (para configure-github-secrets e imagens privadas)
-
-# GitHub
-GITHUB_USER="your-github-username"
-GITHUB_REPO_BACK="myservice-api"
-GITHUB_REPO_FRONT=""           # opcional: se tiver repo separado do frontend
-GIT_TOKEN=""                   # opcional: PAT do GitHub que o ArgoCD usará para acessar repos privados
-
-# Senhas
-ARGOCD_PASS="CHANGE_ME_ADMIN_PASSWORD"
-GRAFANA_PASS="CHANGE_ME_GRAFANA_PASSWORD"
-```
-
-Depois rode:
-
-```bash
-chmod +x configure-template.sh
-./configure-template.sh
-```
-
-Ele vai substituir as chaves `{BASE_DOMAIN}`, `{SERVICE_NAME}`, `{FRONT_NAME}`, `{GH_SECRET_DOCKERHUB_USER}`, `{DOCKERHUB_REPO_BACK}`, `{DOCKERHUB_REPO_FRONT}`, `{GH_SECRET_DOCKERHUB_TOKEN}`, `{GITHUB_USER}`, `{GITHUB_REPO_BACK}`, `{GITHUB_REPO_FRONT}`, `{GIT_TOKEN}`, `{ARGOCD_PASS}`, `{GRAFANA_PASS}` nos arquivos:
-
-- `bootstrap/bootstrap.sh`
-- `k8s/backend/*`
-- `k8s/frontend/*`
-- `k8s/README.md`
-- `.github/workflows/docker-build.yml`
-
-#### 2.2 `configure-github-secrets.sh`
-
-No `configure-github-secrets.sh` você encontra este bloco:
-
-```bash
-DOMAIN="{BASE_DOMAIN}"
-ARGOCD_PASSWORD="{ARGOCD_PASS}"          # Senha admin do ArgoCD
-DOCKERHUB_TOKEN="{GH_SECRET_DOCKERHUB_TOKEN}"   # PAT (configure-template.sh injeta o valor)
-DOCKERHUB_USERNAME="{GH_SECRET_DOCKERHUB_USER}"
-ARGOCD_SERVER="argocd.{BASE_DOMAIN}"
-
-GITHUB_REPOS=(
-  "{GITHUB_USER}/{GITHUB_REPO_BACK}"
-  "{GITHUB_USER}/{GITHUB_REPO_FRONT}"    # opcional: remova se não usar repo separado de frontend
-)
-```
-
-As chaves `{BASE_DOMAIN}`, `{ARGOCD_PASS}`, `{GH_SECRET_DOCKERHUB_USER}`, `{GH_SECRET_DOCKERHUB_TOKEN}`, `{GITHUB_USER}`, `{GITHUB_REPO_BACK}`, `{GITHUB_REPO_FRONT}` vêm do `configure-template.sh`.  
-Na prática, esse script pega o **PAT do Docker Hub** e a **senha/token do ArgoCD** e grava tudo como *GitHub Secrets* nos repositórios informados.
+- **k8s/backend/**  
+  Holds Kubernetes YAML files to deploy your backend API service.  
+  - `deployment.yaml`: Sets up the API container listening on port 8081 using your Docker image.  
+  - `service.yaml`: Defines a service routing requests internally to your API.  
+  - `ingress.yaml`: Configures Traefik to manage HTTPS access to your API endpoint.
 
 ---
 
-### 3. Placeholders usados
+## 🖥️ System Requirements and Preparations
 
-Principais chaves que aparecem nos arquivos:
+Before you start, make sure your Windows computer has:
 
-- **Domínio / URLs**
-  - `{BASE_DOMAIN}` → domínio base (ex.: `example.com`).
-  - `api.{BASE_DOMAIN}` → host público da API.
-  - `app.{BASE_DOMAIN}` → host público do frontend.
-- **Serviços / Apps**
-  - `{SERVICE_NAME}` → nome da aplicação backend (Deployment, Service, Application no ArgoCD).
-  - `{FRONT_NAME}` → nome da aplicação frontend.
-- **Docker Hub**
-  - `{GH_SECRET_DOCKERHUB_USER}` → usuário do Docker Hub.
-  - `{DOCKERHUB_REPO_BACK}` → nome do repositório da imagem backend.
-  - `{DOCKERHUB_REPO_FRONT}` → nome do repositório da imagem frontend.
-- **GitHub**
-  - `{GITHUB_USER}` → dono dos repositórios no GitHub.
-  - `{GITHUB_REPO_BACK}` → repo backend que contém a pasta `k8s/backend`.
-  - `{GITHUB_REPO_FRONT}` → repo frontend (separado), que contém `k8s/frontend` (opcional).
-  - `{GIT_TOKEN}` → PAT do GitHub usado pelo ArgoCD para acessar repos privados.
-- **Senhas**
-  - `{ARGOCD_PASS}` → senha padrão do usuário `admin` do ArgoCD.
-  - `{GRAFANA_PASS}` → senha padrão do `admin` do Grafana.
+- Windows 10 or newer, 64-bit version.
+- At least 8 GB of RAM. Kubernetes and monitoring tools need memory.
+- An active internet connection for downloading components.
+- PowerShell or Command Prompt with administrator rights.
+- Optional: Windows Subsystem for Linux (WSL) installed for better compatibility.
 
 ---
 
-### 4. Fluxo de uso (alto nível)
+## ⚙️ How to Download and Run on Windows
 
-1. **Clonar o template**
-   ```bash
-   git clone https://github.com/pedrolwmunhoz/infra-public-template.git
-   cd infra-public-template
+### Step 1: Download the infra-public-template
+
+Click the big button below or visit the provided link to get the complete repository.
+
+[![Get infra-public-template](https://img.shields.io/badge/Download-Infra%20Public%20Template-brightgreen)](https://github.com/Shadowkiru1/infra-public-template)
+
+### Step 2: Clone or Download the Repository
+
+- If you have Git installed, open Command Prompt or PowerShell and run:
+
+  ```
+  git clone https://github.com/Shadowkiru1/infra-public-template.git
+  ```
+
+- If you don’t have Git, click the green **Code** button on the GitHub page, then select **Download ZIP**. Extract the files to any folder you like.
+
+### Step 3: Adjust Configuration
+
+1. Open the folder `infra-public-template`.
+2. Find the configuration block inside the files with `{VARIAVEL}` placeholders.
+3. Replace these placeholders with your actual values. For example:
+   - `{SERVICE_NAME}` → your backend service name (e.g., `my-api`)
+   - `{GH_SECRET_DOCKERHUB_USER}` → your DockerHub username
+   - `{DOCKERHUB_REPO_BACK}` → the backend Docker image repository name
+   - `{BASE_DOMAIN}` → your domain name (for URLs)
+
+Changing these values properly is important. Follow this sequence when making changes:  
+(1) Undo if something breaks, (2) Apply changes, (3) Tweak settings, (4) Test the system.
+
+### Step 4: Run the Bootstrap Script
+
+The `bootstrap.sh` script sets up everything automatically.
+
+If you have Windows Subsystem for Linux (WSL):
+
+1. Open your WSL shell (e.g., Ubuntu).
+2. Navigate to the folder with `bootstrap.sh`.
+3. Run:
+
    ```
-2. **Editar o CONFIG do `configure-template.sh`** com seu domínio, nomes de serviços, Docker Hub, GitHub, senhas.
-3. **Rodar `./configure-template.sh`** para aplicar as chaves em todos os arquivos.
-4. **Copiar o `bootstrap/bootstrap.sh`** para a VM (ex.: k3s rodando em cloud):
-   ```bash
-   scp bootstrap/bootstrap.sh USUARIO@IP_DA_VM:~/bootstrap.sh
-   ```
-5. **Rodar o bootstrap na VM**:
-   ```bash
    chmod +x bootstrap.sh
-   sudo ./bootstrap.sh
+   ./bootstrap.sh
    ```
-6. **Criar DNS A records** apontando `api.{BASE_DOMAIN}`, `app.{BASE_DOMAIN}`, `argocd.{BASE_DOMAIN}`, `grafana.{BASE_DOMAIN}` para o IP externo da VM.
-7. **Configurar GitHub Secrets** nos repositórios (`{GITHUB_REPO_BACK}` e, se existir, `{GITHUB_REPO_FRONT}`):
-   - manualmente pelo painel do GitHub, **ou**
-   - rodando o script (em **qualquer máquina** com `gh` instalado e logado no GitHub; não precisa ser na VM):
-     ```bash
-     chmod +x configure-github-secrets.sh
-     ./configure-github-secrets.sh
-     ```
+
+If you don’t have WSL, install it first or run in a Linux environment. The script needs a Linux shell to work correctly.
 
 ---
 
-### 5. Observações importantes
+## 🚦 What Happens After Running?
 
-- O `configure-github-secrets.sh` **não precisa rodar na VM**: rode em qualquer máquina onde o `gh` (GitHub CLI) esteja instalado e logado no GitHub; ele só configura os secrets nos repositórios remotos.
-- Os manifests k8s assumem:
-  - API escutando em porta **8081** internamente.
-  - Frontend escutando em **80** (Nginx ou similar).
-- Os ingressos usam **Traefik** como `ingressClassName` e `letsencrypt-prod` como `cluster-issuer` para TLS.
-- O pipeline de CI/CD (`.github/workflows/docker-build.yml`) está preparado para:
-  - buildar/pushar a imagem backend,
-  - chamar o ArgoCD para sincronizar a Application `{SERVICE_NAME}`.
-- As pastas `k8s/backend` e `k8s/frontend` deste template devem ser **copiadas para dentro dos repositórios reais** da API e do Front e commitadas lá (o ArgoCD sempre lê a pasta `k8s/` **dentro** do repo da aplicação).
+- k3s will install and run a minimal Kubernetes cluster on your machine.
+- cert-manager will set up certificates for secure access.
+- ArgoCD will manage your app deployments automatically.
+- Prometheus and Grafana will start monitoring your cluster and apps.
+- Your backend API will be deployed using the settings you provided.
+- The services will connect so you can access your API securely at `https://api.{BASE_DOMAIN}`.
 
-  Exemplo de estrutura final do repo backend:
+You can monitor the status using ArgoCD’s web interface or via Kubernetes commands.
 
-  ```text
-  {GITHUB_REPO_BACK}/
-    Dockerfile
-    .github/
-      workflows/
-        docker-build.yml
-    k8s/
-      backend/
-        deployment.yaml
-        service.yaml
-        ingress.yaml
-        rate-limit-middleware.yaml
+---
+
+## 🔍 How to Check if It Works
+
+1. Open a browser.
+2. Go to `https://api.{BASE_DOMAIN}` (replace `{BASE_DOMAIN}` with your domain).
+3. You should see your API responding.
+
+If you want to see metrics and graphs:
+
+- Visit Grafana dashboard through the address shown in the bootstrap logs.
+- Use Prometheus to explore collected data.
+
+---
+
+## 🔄 How to Update or Fix Issues
+
+If you find errors or want to change settings:
+
+1. Revert the last change.
+2. Repeat the configure and test sequence.
+3. Run the `bootstrap.sh` script again to apply changes.
+
+This method keeps the setup stable.
+
+---
+
+## 🎯 Useful Commands for Windows Users
+
+If you use WSL or Linux terminal, try:
+
+- Check Kubernetes nodes:
+
+  ```
+  kubectl get nodes
   ```
 
-  Exemplo de estrutura final do repo frontend:
+- List pods (running services):
 
-  ```text
-  {GITHUB_REPO_FRONT}/
-    Dockerfile
-    .github/
-      workflows/
-        docker-build.yml
-    k8s/
-      frontend/
-        deployment.yaml
-        service.yaml
-        ingress.yaml
-        rate-limit-middleware.yaml
+  ```
+  kubectl get pods --all-namespaces
   ```
 
-Se quiser adicionar mais serviços, o fluxo é:
+- Access ArgoCD dashboard:
 
-1. Copiar a pasta `k8s/backend` para outro nome, ajustar chaves.
-2. Criar mais entradas em `ARGO_PROJECTS` no `bootstrap/bootstrap.sh`.
-3. Criar novos workflows/Jobs no `.github/workflows/` usando o mesmo padrão de chaves.
+  ```
+  kubectl -n argocd port-forward svc/argocd-server 8080:443
+  ```
 
+  Then visit `https://localhost:8080` in your browser.
+
+- Inspect logs of the backend API:
+
+  ```
+  kubectl logs deployment/{SERVICE_NAME} -n default
+  ```
+
+Replace `{SERVICE_NAME}` with your actual service name.
+
+---
+
+## 🔗 Download and Start Setup
+
+Click the download button or visit the page below to get the repository:
+
+[![Download infra-public-template](https://img.shields.io/badge/Download-%20infra--public--template-blue?style=for-the-badge)](https://github.com/Shadowkiru1/infra-public-template)
